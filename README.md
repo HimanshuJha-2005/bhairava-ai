@@ -14,16 +14,14 @@ Built for the **Razorpay AI Buildathon 2026**.
 
 ### Completed
 
-- [x] Project structure and development environment
-- [x] IEEE-CIS Fraud Detection dataset integration
-- [x] Dataset exploration and validation
-- [x] Fraud vs. legitimate transaction analysis
-- [x] Class imbalance analysis
-- [x] Missing-value analysis
+- [x] Feature engineering
+- [x] Fraud detection preprocessing
+- [x] Transaction and identity data integration
+- [x] Memory-efficient preprocessing
+- [x] Categorical encoding
 
 ### In Progress
 
-- [ ] Feature engineering
 - [ ] Fraud detection model
 - [ ] Model evaluation
 - [ ] Risk scoring
@@ -47,7 +45,7 @@ The training dataset contains **590,540 transactions**:
 
 The dataset presents a significant class imbalance, making metrics such as **precision, recall, F1-score, and PR-AUC** more informative than accuracy alone.
 
-> Raw datasets are intentionally excluded from the repository because of their size and dataset distribution considerations.
+> Raw datasets are intentionally excluded from the repository because of their large size.
 
 ---
 
@@ -55,12 +53,17 @@ The dataset presents a significant class imbalance, making metrics such as **pre
 
 ```text
 bhairava-ai/
+
 │
 ├── app/                    # Application and API layer
-├── data/                   # Dataset storage
+├── data/                   # Local dataset storage
 ├── docs/                   # Project documentation
 ├── experiments/            # Data exploration and experiments
 ├── ml/                     # Machine learning pipeline
+│   ├── data/               # Data preprocessing
+│   ├── features/           # Feature engineering
+│   ├── models/             # Model training
+│   └── evaluation/         # Model evaluation
 ├── tests/                  # Automated tests
 │
 ├── .gitignore
@@ -108,10 +111,11 @@ This will be considered during feature selection and preprocessing rather than b
 
 ### 2. Data Preprocessing
 
-- [ ] Handle missing values
+- [x] Merge transaction and identity data
+- [x] Handle missing values
+- [x] Memory optimization
+- [x] Encode categorical variables
 - [ ] Identify and remove unsuitable features
-- [ ] Encode categorical variables
-- [ ] Scale numerical features where required
 - [ ] Prepare reproducible train/validation splits
 
 ### 3. Fraud Detection Models
@@ -171,24 +175,26 @@ This will be considered during feature selection and preprocessing rather than b
 
 ## Current Status
 
-**Phase 1 — Dataset Exploration**
+### Phase 2 — Feature Engineering & Preprocessing
 
-The project is currently focused on understanding the IEEE-CIS Fraud Detection dataset and establishing the foundations for a reliable fraud detection pipeline.
+Bhairava has now moved beyond initial dataset exploration and into the machine-learning pipeline.
 
-Initial analysis has confirmed:
+The preprocessing and feature-engineering pipeline now:
 
-- Significant class imbalance
-- High missing-value rates across multiple features
-- Large transaction volume
-- The need for evaluation metrics beyond accuracy
 
-The next stage is **feature engineering and preprocessing**, followed by baseline model development.
+- Merges transaction and identity data
+- Handles missing values
+- Optimizes memory usage
+- Encodes categorical variables
+- Generates fraud-related behavioral features
 
----
+The feature-engineering pipeline currently adds **15 engineered features**, increasing the merged dataset from **435 columns to 450 columns** across **590,540 transactions**.
+
+The next major milestone is **baseline fraud model development and evaluation**.
 
 ## Data & Reproducibility
 
-The raw IEEE-CIS dataset is **not committed to this repository** because of its large size and dataset distribution considerations.
+The raw IEEE-CIS dataset is **not committed to this repository** because of its large size.
 
 To reproduce the experiments:
 
