@@ -29,3 +29,6 @@ Thumbs.db
 # ML artifacts
 *.pkl
 *.joblib
+
+# Datasets
+data/
