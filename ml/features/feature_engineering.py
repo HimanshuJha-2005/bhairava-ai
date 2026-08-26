@@ -98,7 +98,6 @@ def add_velocity_features(df):
     print("  Adding velocity features...")
 
     # Data must be chronological
-    df = df.sort_values('TransactionDT').copy()
 
     # Number of previous transactions for this card
     df['card1_txn_count'] = (
@@ -169,15 +168,10 @@ def add_email_features(df):
 
 def add_device_features(df):
     """
-    Device-based signals from the identity file.
-
-    Missing device info is itself a signal (no DeviceType = no identity data).
-    Mobile transactions have slightly different fraud patterns than desktop.
+    has_identity_data is computed in preprocessing.merge_data()
+    before label encoding runs — that's the right place for it.
+    Nothing additional to add here yet.
     """
-    print("  Adding device features...")
-
-    
-
     return df
 
 
