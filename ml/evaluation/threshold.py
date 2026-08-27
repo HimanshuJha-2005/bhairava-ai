@@ -3,19 +3,17 @@ Bhairava — Fraud Detection System
 ml/evaluation/threshold.py
 
 Finds the optimal fraud probability threshold using
-the validation set, then evaluates that locked threshold
-on the untouched test set.
+the validation set and locks it for final evaluation.
 """
 
 import json
-import numpy as np
 from pathlib import Path
 
+import numpy as np
 from sklearn.metrics import (
     precision_score,
     recall_score,
     f1_score,
-    classification_report
 )
 
 
@@ -24,7 +22,7 @@ MODEL_DIR = BASE_DIR / "data/models"
 
 
 def load_predictions():
-    """Load saved validation and test predictions."""
+    """Load validation probabilities and labels."""
 
     validation_proba = np.load(
         MODEL_DIR / "bhairava_validation_probas.npy"
@@ -34,39 +32,23 @@ def load_predictions():
         MODEL_DIR / "bhairava_validation_labels.npy"
     )
 
-    test_proba = np.load(
-        MODEL_DIR / "bhairava_test_probas.npy"
-    )
-
-    return validation_proba, validation_labels, test_proba
+    return validation_proba, validation_labels
 
 
 def find_best_threshold(y_true, probabilities):
     """
-    Search probability thresholds and select the one
-    producing the highest validation F1 score.
+    Search probability thresholds and select the threshold
+    that produces the highest validation F1 score.
     """
 
-    best_threshold = 0.5
+    best_threshold = 0.50
     best_f1 = 0.0
-
-    results = []
 
     for threshold in np.arange(0.05, 0.96, 0.01):
 
-        predictions = (probabilities >= threshold).astype(int)
-
-        precision = precision_score(
-            y_true,
-            predictions,
-            zero_division=0
-        )
-
-        recall = recall_score(
-            y_true,
-            predictions,
-            zero_division=0
-        )
+        predictions = (
+            probabilities >= threshold
+        ).astype(int)
 
         f1 = f1_score(
             y_true,
@@ -74,68 +56,11 @@ def find_best_threshold(y_true, probabilities):
             zero_division=0
         )
 
-        results.append({
-            "threshold": round(float(threshold), 2),
-            "precision": precision,
-            "recall": recall,
-            "f1": f1
-        })
-
         if f1 > best_f1:
             best_f1 = f1
             best_threshold = float(threshold)
 
-    return best_threshold, best_f1, results
-
-
-def evaluate_threshold(y_true, probabilities, threshold):
-    """Evaluate a locked threshold."""
-
-    predictions = (probabilities >= threshold).astype(int)
-
-    precision = precision_score(
-        y_true,
-        predictions,
-        zero_division=0
-    )
-
-    recall = recall_score(
-        y_true,
-        predictions,
-        zero_division=0
-    )
-
-    f1 = f1_score(
-        y_true,
-        predictions,
-        zero_division=0
-    )
-
-    print("\n" + "=" * 60)
-    print("Final Test Results")
-    print("=" * 60)
-
-    print(f"Threshold:  {threshold:.2f}")
-    print(f"Precision:  {precision:.4f}")
-    print(f"Recall:     {recall:.4f}")
-    print(f"F1 Score:   {f1:.4f}")
-
-    print("\nClassification Report:")
-    print(
-        classification_report(
-            y_true,
-            predictions,
-            target_names=["Legitimate", "Fraud"],
-            zero_division=0
-        )
-    )
-
-    return {
-        "threshold": threshold,
-        "precision": precision,
-        "recall": recall,
-        "f1": f1
-    }
+    return best_threshold, best_f1
 
 
 def main():
@@ -144,13 +69,16 @@ def main():
     print("Bhairava Threshold Optimization")
     print("=" * 60)
 
-    validation_proba, validation_labels, test_proba = load_predictions()
+    # Load validation data only
+    validation_proba, validation_labels = load_predictions()
 
-    print(f"\nValidation samples: {len(validation_labels):,}")
-    print(f"Test samples:       {len(test_proba):,}")
+    print(
+        f"\nValidation samples: "
+        f"{len(validation_labels):,}"
+    )
 
-    # Optimize ONLY on validation data
-    best_threshold, best_f1, threshold_results = find_best_threshold(
+    # Optimize threshold ONLY on validation data
+    best_threshold, best_f1 = find_best_threshold(
         validation_labels,
         validation_proba
     )
@@ -159,31 +87,40 @@ def main():
     print("Optimal Threshold")
     print("=" * 60)
 
-    print(f"Best threshold: {best_threshold:.2f}")
-    print(f"Validation F1:  {best_f1:.4f}")
+    print(
+        f"Best threshold: {best_threshold:.2f}"
+    )
 
-    # Save threshold for the risk engine
-    threshold_path = MODEL_DIR / "bhairava_threshold.json"
+    print(
+        f"Validation F1:  {best_f1:.4f}"
+    )
 
-    with open(threshold_path, "w") as f:
+    # Save locked threshold
+    threshold_path = (
+        MODEL_DIR / "bhairava_threshold.json"
+    )
+
+    with open(threshold_path, "w") as file:
         json.dump(
             {
                 "threshold": best_threshold,
                 "validation_f1": best_f1
             },
-            f,
+            file,
             indent=4
         )
 
-    print(f"Threshold saved: {threshold_path}")
+    print(
+        f"Threshold saved: {threshold_path}"
+    )
 
-    # IMPORTANT:
-    # Test labels are intentionally not used here because
-    # the test set must remain untouched for final evaluation.
     print("\nThreshold locked.")
 
     print("\nNext step:")
-    print("Evaluate the locked threshold on the test set.")
+    print(
+        "Evaluate the locked threshold "
+        "on the untouched test set."
+    )
 
 
 if __name__ == "__main__":
