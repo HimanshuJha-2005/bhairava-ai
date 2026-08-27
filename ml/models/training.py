@@ -28,6 +28,8 @@ from sklearn.metrics import (
     recall_score,
     roc_auc_score,
 )
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 from xgboost import XGBClassifier
 
 sys.path.append(str(Path(__file__).resolve().parents[2]))
@@ -50,15 +52,7 @@ MODEL_DIR.mkdir(parents=True, exist_ok=True)
 # ---------------------------------------------------------
 
 def get_features_and_target(df):
-    """
-    Separate model features from the target.
-
-    Drops:
-    - TransactionID: identifier only
-    - isFraud: target
-    - TransactionDT: raw timestamp already used for
-      chronological ordering and feature engineering
-    """
+    """Separate model features from the target."""
 
     drop_cols = [
         "TransactionID",
@@ -86,15 +80,7 @@ def time_based_split(
     train_ratio=0.7,
     validation_ratio=0.1,
 ):
-    """
-    Chronological train/validation/test split.
-
-    Train      → 70%
-    Validation → 10%
-    Test       → 20%
-
-    The test set remains untouched until final evaluation.
-    """
+    """Create chronological train/validation/test splits."""
 
     df_sorted = (
         df.sort_values("TransactionDT")
@@ -120,20 +106,17 @@ def time_based_split(
 
     print(
         f"  Train:      {len(train):,} rows | "
-        f"Fraud rate: "
-        f"{train['isFraud'].mean() * 100:.2f}%"
+        f"Fraud rate: {train['isFraud'].mean() * 100:.2f}%"
     )
 
     print(
         f"  Validation: {len(validation):,} rows | "
-        f"Fraud rate: "
-        f"{validation['isFraud'].mean() * 100:.2f}%"
+        f"Fraud rate: {validation['isFraud'].mean() * 100:.2f}%"
     )
 
     print(
         f"  Test:       {len(test):,} rows | "
-        f"Fraud rate: "
-        f"{test['isFraud'].mean() * 100:.2f}%"
+        f"Fraud rate: {test['isFraud'].mean() * 100:.2f}%"
     )
 
     return train, validation, test
@@ -149,15 +132,13 @@ def evaluate_model(
     y_test,
     model_name,
 ):
-    """
-    Evaluate a trained model.
-    """
+    """Evaluate a trained model."""
 
     y_pred = model.predict(X_test)
 
-    y_proba = model.predict_proba(
-        X_test
-    )[:, 1]
+    y_proba = (
+        model.predict_proba(X_test)[:, 1]
+    )
 
     precision = precision_score(
         y_test,
@@ -236,18 +217,28 @@ def train_baseline(
     """
     Logistic Regression baseline.
 
-    Uses class_weight='balanced'.
+    StandardScaler improves convergence because
+    features have different numerical scales.
     """
 
     print(
         "\nTraining Logistic Regression baseline..."
     )
 
-    model = LogisticRegression(
-        max_iter=1000,
-        class_weight="balanced",
-        random_state=42,
-    )
+    model = Pipeline([
+        (
+            "scaler",
+            StandardScaler(),
+        ),
+        (
+            "lr",
+            LogisticRegression(
+                max_iter=2000,
+                class_weight="balanced",
+                random_state=42,
+            ),
+        ),
+    ])
 
     model.fit(
         X_train,
@@ -275,10 +266,7 @@ def train_xgboost(
     y_test,
 ):
     """
-    Train XGBoost.
-
-    Validation data is used for early stopping.
-    Test data remains untouched until evaluation.
+    Train XGBoost using validation data for early stopping.
     """
 
     print("\nTraining XGBoost...")
@@ -291,7 +279,19 @@ def train_xgboost(
         y_train == 1
     ).sum()
 
-    scale_pos_weight = neg / pos
+    original_weight = neg / pos
+
+    # Cap class weighting to avoid excessive
+    # pressure toward the minority class.
+    scale_pos_weight = min(
+        original_weight,
+        10,
+    )
+
+    print(
+        f"  Original class ratio: "
+        f"{original_weight:.2f}"
+    )
 
     print(
         f"  scale_pos_weight: "
@@ -299,7 +299,7 @@ def train_xgboost(
     )
 
     model = XGBClassifier(
-        n_estimators=500,
+        n_estimators=1500,
         max_depth=6,
         learning_rate=0.05,
         scale_pos_weight=scale_pos_weight,
@@ -346,13 +346,7 @@ def compare_and_save(
     y_validation,
     y_test,
 ):
-    """
-    Compare models using F1 score
-    and save the winner.
-
-    Also saves validation probabilities
-    for threshold optimization.
-    """
+    """Compare models and save the winner."""
 
     print("\n" + "=" * 70)
     print("Model Comparison")
@@ -436,15 +430,6 @@ def compare_and_save(
         validation_proba_path,
         validation_proba,
     )
-    labels_path = MODEL_DIR / "bhairava_test_labels.npy"
-    
-    np.save(
-        labels_path,
-        y_test
-        )
-    print(
-        f"Test labels saved: {labels_path}"
-        )
 
     print(
         f"Validation probabilities saved: "
@@ -489,6 +474,25 @@ def compare_and_save(
         f"{test_proba_path}"
     )
 
+    # -----------------------------------------------------
+    # Save test labels
+    # -----------------------------------------------------
+
+    test_labels_path = (
+        MODEL_DIR /
+        "bhairava_test_labels.npy"
+    )
+
+    np.save(
+        test_labels_path,
+        y_test.to_numpy(),
+    )
+
+    print(
+        f"Test labels saved: "
+        f"{test_labels_path}"
+    )
+
     return winner
 
 
@@ -497,9 +501,7 @@ def compare_and_save(
 # ---------------------------------------------------------
 
 def train():
-    """
-    Complete Bhairava training pipeline.
-    """
+    """Run the complete Bhairava training pipeline."""
 
     print("=" * 60)
     print("Bhairava Training Pipeline")
@@ -520,21 +522,15 @@ def train():
 
     # 4. Separate features + target
     X_train, y_train = (
-        get_features_and_target(
-            train_df
-        )
+        get_features_and_target(train_df)
     )
 
     X_validation, y_validation = (
-        get_features_and_target(
-            validation_df
-        )
+        get_features_and_target(validation_df)
     )
 
     X_test, y_test = (
-        get_features_and_target(
-            test_df
-        )
+        get_features_and_target(test_df)
     )
 
     print(
