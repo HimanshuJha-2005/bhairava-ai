@@ -299,10 +299,13 @@ def train_xgboost(
     )
 
     model = XGBClassifier(
-        n_estimators=1500,
-        max_depth=6,
-        learning_rate=0.05,
+        n_estimators=2000,
+        max_depth=7,
+        learning_rate=0.03,
         scale_pos_weight=scale_pos_weight,
+        colsample_bytree=0.70,
+        subsample=0.80,
+        min_child_weight=5,
         eval_metric="aucpr",
         early_stopping_rounds=50,
         random_state=42,

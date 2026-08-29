@@ -48,12 +48,6 @@ def add_time_features(df):
         df["day_of_week"] >= 5
     ).astype(np.int8)
 
-    # Combined temporal signal
-    df["is_night_weekend"] = (
-        (df["is_night"] == 1)
-        & (df["is_weekend"] == 1)
-    ).astype(np.int8)
-
     return df
 
 
@@ -147,6 +141,14 @@ def add_amount_features(df):
     ).astype(np.float32)
 
     # -----------------------------------------------------
+    # Amount cents / fractional component
+    # -----------------------------------------------------
+
+    df["amount_decimal"] = (
+        amount - np.floor(amount)
+    ).astype(np.float32)
+
+    # -----------------------------------------------------
     # Round amount
     # -----------------------------------------------------
 
@@ -158,7 +160,7 @@ def add_amount_features(df):
     ).astype(np.int8)
 
     # -----------------------------------------------------
-    # Historical card amount behavior
+    # Historical card amount behavior (card1)
     # -----------------------------------------------------
 
     card_count = (
@@ -196,75 +198,41 @@ def add_amount_features(df):
     # Historical card + address amount behavior
     # -----------------------------------------------------
 
-    card_addr_count = (
-        df.groupby(
-            ["card1", "addr1"]
+    if "addr1" in df.columns:
+        card_addr_count = (
+            df.groupby(
+                ["card1", "addr1"]
+            )
+            .cumcount()
         )
-        .cumcount()
-    )
 
-    card_addr_sum = (
-        df.groupby(
-            ["card1", "addr1"]
-        )["TransactionAmt"]
-        .cumsum()
-        - amount
-    )
+        card_addr_sum = (
+            df.groupby(
+                ["card1", "addr1"]
+            )["TransactionAmt"]
+            .cumsum()
+            - amount
+        )
 
-    card_addr_mean = (
-        card_addr_sum
-        / card_addr_count.replace(
+        card_addr_mean = (
+            card_addr_sum
+            / card_addr_count.replace(
+                0,
+                np.nan,
+            )
+        )
+
+        card_addr_mean = card_addr_mean.fillna(
+            amount
+        )
+
+        df["amount_vs_card_addr_mean"] = (
+            amount
+            / (card_addr_mean + 1e-6)
+        ).clip(
             0,
-            np.nan,
-        )
-    )
-
-    card_addr_mean = card_addr_mean.fillna(
-        amount
-    )
-
-    df["amount_vs_card_addr_mean"] = (
-        amount
-        / (card_addr_mean + 1e-6)
-    ).clip(
-        0,
-        100,
-    ).astype(np.float32)
-
-    # -----------------------------------------------------
-    # Historical address amount behavior
-    # -----------------------------------------------------
-
-    addr_count = (
-        df.groupby("addr1")
-        .cumcount()
-    )
-
-    addr_sum = (
-        df.groupby("addr1")["TransactionAmt"]
-        .cumsum()
-        - amount
-    )
-
-    addr_mean = (
-        addr_sum
-        / addr_count.replace(
-            0,
-            np.nan,
-        )
-    )
-
-    addr_mean = addr_mean.fillna(
-        amount
-    )
-
-    df["amount_vs_addr_mean"] = (
-        amount
-        / (addr_mean + 1e-6)
-    ).clip(
-        0,
-        100,
-    ).astype(np.float32)
+            100,
+        ).astype(np.float32)
 
     return df
 
@@ -284,7 +252,7 @@ def add_velocity_features(df):
     print("  Adding velocity features...")
 
     # -----------------------------------------------------
-    # Card velocity
+    # Card velocity (card1)
     # -----------------------------------------------------
 
     df["card1_txn_count"] = (
@@ -296,30 +264,36 @@ def add_velocity_features(df):
     # Card + address velocity
     # -----------------------------------------------------
 
-    df["card_addr_txn_count"] = (
-        df.groupby(
-            ["card1", "addr1"]
-        )
-        .cumcount()
-    ).astype(np.int32)
+    if "addr1" in df.columns:
+        df["card_addr_txn_count"] = (
+            df.groupby(
+                ["card1", "addr1"]
+            )
+            .cumcount()
+        ).astype(np.int32)
+
+    # -----------------------------------------------------
+    # Composite card identity velocity
+    # -----------------------------------------------------
+
+    card_composite_cols = [
+        col for col in ["card1", "card2", "card3", "card5", "addr1"]
+        if col in df.columns
+    ]
+
+    if len(card_composite_cols) > 1:
+        df["card_full_txn_count"] = (
+            df.groupby(card_composite_cols)
+            .cumcount()
+        ).astype(np.int32)
 
     # -----------------------------------------------------
     # Email velocity
     # -----------------------------------------------------
 
-    df["email_txn_count"] = (
-        df.groupby("P_emaildomain")
-        .cumcount()
-    ).astype(np.int32)
-
-    # -----------------------------------------------------
-    # Device velocity
-    # -----------------------------------------------------
-
-    if "DeviceType" in df.columns:
-
-        df["device_txn_count"] = (
-            df.groupby("DeviceType")
+    if "P_emaildomain" in df.columns:
+        df["email_txn_count"] = (
+            df.groupby("P_emaildomain")
             .cumcount()
         ).astype(np.int32)
 
@@ -339,18 +313,19 @@ def add_velocity_features(df):
     # Time since previous card + address transaction
     # -----------------------------------------------------
 
-    df["card_addr_time_since_prev"] = (
-        df.groupby(
-            ["card1", "addr1"]
-        )["TransactionDT"]
-        .diff()
-        .fillna(-1)
-        .clip(lower=-1)
-        .astype(np.float32)
-    )
+    if "addr1" in df.columns:
+        df["card_addr_time_since_prev"] = (
+            df.groupby(
+                ["card1", "addr1"]
+            )["TransactionDT"]
+            .diff()
+            .fillna(-1)
+            .clip(lower=-1)
+            .astype(np.float32)
+        )
 
     # -----------------------------------------------------
-    # Very rapid card reuse
+    # Very rapid card reuse (< 1 hour)
     # -----------------------------------------------------
 
     df["rapid_card_activity"] = (
@@ -379,106 +354,32 @@ def add_card_features(df):
 
     print("  Adding card features...")
 
-    # -----------------------------------------------------
-    # Historical unique cards per address
-    # -----------------------------------------------------
+    if "addr1" in df.columns:
+        # Count distinct cards previously seen at each billing address.
+        # Single-pass chronological calculation without leakage.
+        is_new_card = (
+            ~df.duplicated(
+                subset=["addr1", "card1"],
+                keep="first",
+            )
+        ).astype(np.int32)
 
-    # Mark the first occurrence of each address/card pair.
-    #
-    # Example:
-    #
-    # addr A + card 1  -> first occurrence = 1
-    # addr A + card 1  -> first occurrence = 0
-    # addr A + card 2  -> first occurrence = 1
-    #
-    # The cumulative sum BEFORE the current row therefore
-    # represents how many distinct cards were previously
-    # observed at this address.
-
-    new_card_addr_pair = (
-        ~df.duplicated(
-            subset=["addr1", "card1"],
-            keep="first",
-        )
-    ).astype(np.int8)
-
-    historical_unique_cards = (
-        new_card_addr_pair
-        .groupby(df["addr1"])
-        .cumsum()
-        - new_card_addr_pair
-    )
-
-    # Count distinct cards previously seen at each billing address.
-    # The dataframe is chronological, so the first occurrence of
-    # each (addr1, card1) pair represents a newly observed card.
-    is_new_card = ~df.duplicated(
-        subset=['addr1', 'card1'],
-        keep='first',
-    )
-
-    df['_new_card_at_addr'] = is_new_card.astype(np.int8)
-
-    df['unique_cards_per_addr'] = (
-        df.groupby('addr1')['_new_card_at_addr'].cumsum()
-            - df['_new_card_at_addr']
-    )
-
-    df.drop(columns=['_new_card_at_addr'], inplace=True)
-
-    # -----------------------------------------------------
-    # Historical high-amount behavior
-    # -----------------------------------------------------
-
-    # Instead of using the full-dataset 90th percentile,
-    # which would leak future information, use a historical
-    # mean + 2 standard deviations threshold.
-
-    historical_amount_threshold = (
-        df["TransactionAmt"]
-        .expanding(min_periods=50)
-        .mean()
-        .shift(1)
-        +
-        2
-        *
-        df["TransactionAmt"]
-        .expanding(min_periods=50)
-        .std()
-        .shift(1)
-    )
-
-    historical_amount_threshold = (
-        historical_amount_threshold
-        .fillna(
-            df["TransactionAmt"]
-        )
-    )
-
-    # -----------------------------------------------------
-    # High amount + rarely used card
-    # -----------------------------------------------------
-
-    df["high_amount_new_card"] = (
-        (
-            df["TransactionAmt"]
-            > historical_amount_threshold
-        )
-        & (
-            df["card1_txn_count"] < 5
-        )
-    ).astype(np.int8)
+        df["unique_cards_per_addr"] = (
+            is_new_card.groupby(df["addr1"]).cumsum()
+            - is_new_card
+        ).astype(np.int32)
 
     # -----------------------------------------------------
     # New card/address combination
     # -----------------------------------------------------
 
-    df["is_new_card_addr"] = (
-        df["card_addr_txn_count"] == 0
-    ).astype(np.int8)
+    if "card_addr_txn_count" in df.columns:
+        df["is_new_card_addr"] = (
+            df["card_addr_txn_count"] == 0
+        ).astype(np.int8)
 
     # -----------------------------------------------------
-    # Card reuse intensity
+    # Card reuse intensity (log scale)
     # -----------------------------------------------------
 
     df["card_reuse_signal"] = (
@@ -486,14 +387,6 @@ def add_card_features(df):
             df["card1_txn_count"]
         )
     ).astype(np.float32)
-
-    # -----------------------------------------------------
-    # Address card diversity
-    # -----------------------------------------------------
-
-    df["multiple_cards_same_addr"] = (
-        df["unique_cards_per_addr"] >= 2
-    ).astype(np.int8)
 
     return df
 
@@ -509,141 +402,51 @@ def add_email_features(df):
 
     print("  Adding email features...")
 
-    df["email_domain_freq"] = (
-        df.groupby("P_emaildomain")
-        .cumcount()
-    ).astype(np.int32)
+    if "P_emaildomain" in df.columns:
+        df["email_domain_freq"] = (
+            df.groupby("P_emaildomain")
+            .cumcount()
+        ).astype(np.int32)
 
-    # Rare domain
-    df["is_rare_email_domain"] = (
-        df["email_domain_freq"] < 100
-    ).astype(np.int8)
+        # Rare domain
+        df["is_rare_email_domain"] = (
+            df["email_domain_freq"] < 100
+        ).astype(np.int8)
 
-    # First observed transaction for domain
-    df["is_new_email_domain"] = (
-        df["email_domain_freq"] == 0
-    ).astype(np.int8)
-
-    return df
-
-
-# ---------------------------------------------------------
-# Device Features
-# ---------------------------------------------------------
-
-def add_device_features(df):
-    """
-    Device and identity availability signals.
-
-    has_identity_data is created during preprocessing.
-    """
-
-    print("  Adding device features...")
-
-    if "has_identity_data" in df.columns:
-
-        df["missing_identity_data"] = (
-            df["has_identity_data"] == 0
+    if "P_emaildomain" in df.columns and "R_emaildomain" in df.columns:
+        df["email_domain_match"] = (
+            df["P_emaildomain"] == df["R_emaildomain"]
         ).astype(np.int8)
 
     return df
 
 
 # ---------------------------------------------------------
-# Interaction Features
+# Temporal Anchor Features
 # ---------------------------------------------------------
 
-def add_interaction_features(df):
+def add_temporal_anchor_features(df):
     """
-    Combine individual fraud signals into higher-level
-    behavioral indicators.
+    Card age anchor features from Vesta D-columns.
 
-    These features do not use the target variable.
+    D1 represents timedelta from card inception/first transaction.
+    (TransactionDT / 86400) - D1 calculates the historical card
+    anchor day at transaction time without future leakage.
     """
 
-    print("  Adding interaction features...")
+    print("  Adding temporal anchor features...")
 
-    # -----------------------------------------------------
-    # Large amount relative to card history + new card
-    # -----------------------------------------------------
+    if "D1" in df.columns:
+        df["D1_anchor_day"] = (
+            (df["TransactionDT"] / 86400.0)
+            - df["D1"]
+        ).astype(np.float32)
 
-    df["amount_new_card_interaction"] = (
-        (
-            df["amount_vs_card_mean"] > 2.0
-        )
-        & (
-            df["card1_txn_count"] < 5
-        )
-    ).astype(np.int8)
-
-    # -----------------------------------------------------
-    # New card + new email
-    # -----------------------------------------------------
-
-    df["new_card_new_email"] = (
-        (
-            df["card1_txn_count"] == 0
-        )
-        & (
-            df["email_domain_freq"] == 0
-        )
-    ).astype(np.int8)
-
-    # -----------------------------------------------------
-    # Night + unusually large amount
-    # -----------------------------------------------------
-
-    df["night_high_amount"] = (
-        (
-            df["is_night"] == 1
-        )
-        & (
-            df["amount_zscore"] > 2
-        )
-    ).astype(np.int8)
-
-    # -----------------------------------------------------
-    # Missing identity + new card
-    # -----------------------------------------------------
-
-    if "missing_identity_data" in df.columns:
-
-        df["missing_identity_new_card"] = (
-            (
-                df["missing_identity_data"] == 1
-            )
-            & (
-                df["card1_txn_count"] < 5
-            )
-        ).astype(np.int8)
-
-    # -----------------------------------------------------
-    # Rapid activity + high amount
-    # -----------------------------------------------------
-
-    df["rapid_high_amount"] = (
-        (
-            df["rapid_card_activity"] == 1
-        )
-        & (
-            df["amount_vs_card_mean"] > 2
-        )
-    ).astype(np.int8)
-
-    # -----------------------------------------------------
-    # Multiple cards + missing identity
-    # -----------------------------------------------------
-
-    if "missing_identity_data" in df.columns:
-
-        df["multiple_cards_missing_identity"] = (
-            (
-                df["multiple_cards_same_addr"] == 1
-            )
-            & (
-                df["missing_identity_data"] == 1
-            )
-        ).astype(np.int8)
+    if "D2" in df.columns:
+        df["D2_anchor_day"] = (
+            (df["TransactionDT"] / 86400.0)
+            - df["D2"]
+        ).astype(np.float32)
 
     return df
 
@@ -682,8 +485,7 @@ def engineer_features(df):
     df = add_velocity_features(df)
     df = add_card_features(df)
     df = add_email_features(df)
-    df = add_device_features(df)
-    df = add_interaction_features(df)
+    df = add_temporal_anchor_features(df)
 
     new_cols = (
         df.shape[1]
@@ -691,7 +493,7 @@ def engineer_features(df):
     )
 
     print("\n" + "=" * 50)
-    print("✅ Features ready")
+    print("[+] Features ready")
     print(
         f"   Original columns:   "
         f"{original_cols}"
@@ -719,54 +521,42 @@ def get_feature_list():
     """
 
     return [
-
         # Time
         "hour",
         "day_of_week",
         "is_night",
         "is_weekend",
-        "is_night_weekend",
 
         # Amount
         "amount_zscore",
         "amount_log",
+        "amount_decimal",
         "is_round_amount",
         "amount_vs_card_mean",
         "amount_vs_card_addr_mean",
-        "amount_vs_addr_mean",
 
         # Velocity
         "card1_txn_count",
         "card_addr_txn_count",
+        "card_full_txn_count",
         "email_txn_count",
-        "device_txn_count",
         "card_time_since_prev",
         "card_addr_time_since_prev",
         "rapid_card_activity",
 
         # Card
         "unique_cards_per_addr",
-        "high_amount_new_card",
         "is_new_card_addr",
         "card_reuse_signal",
-        "multiple_cards_same_addr",
 
         # Email
         "email_domain_freq",
         "is_rare_email_domain",
-        "is_new_email_domain",
+        "email_domain_match",
 
-        # Device
-        "has_identity_data",
-        "missing_identity_data",
-
-        # Interactions
-        "amount_new_card_interaction",
-        "new_card_new_email",
-        "night_high_amount",
-        "missing_identity_new_card",
-        "rapid_high_amount",
-        "multiple_cards_missing_identity",
+        # Temporal anchor
+        "D1_anchor_day",
+        "D2_anchor_day",
     ]
 
 
@@ -812,12 +602,11 @@ if __name__ == "__main__":
     features_to_check = [
         "is_night",
         "is_weekend",
+        "amount_decimal",
         "amount_zscore",
         "amount_vs_card_mean",
         "card1_txn_count",
-        "high_amount_new_card",
         "is_rare_email_domain",
-        "missing_identity_data",
         "rapid_card_activity",
     ]
 
