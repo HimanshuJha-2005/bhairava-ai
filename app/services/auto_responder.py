@@ -18,6 +18,7 @@ from app.schemas.transaction import (
     MerchantNotification,
 )
 from app.services.fraud_detector import detector_service
+from app.services.audit_store import audit_store
 from ml.evaluation.explainability import explain_transaction
 
 
@@ -96,7 +97,7 @@ class AutoResponderService:
         audit_id = f"aud_{uuid.uuid4().hex[:12]}"
         confidence = float(abs(effective_risk - 0.5) * 2.0)
 
-        return AutoResponseDecision(
+        decision = AutoResponseDecision(
             transaction_id=payload.transaction_id,
             action=action,
             risk_score=round(effective_risk, 4),
@@ -108,6 +109,21 @@ class AutoResponderService:
             decision_timestamp=datetime.now(timezone.utc),
             audit_id=audit_id,
         )
+
+        # Persist to audit store for traceability and feedback ingestion
+        audit_store.log_decision(
+            audit_id=audit_id,
+            transaction_id=payload.transaction_id,
+            action=action.value,
+            risk_score=round(effective_risk, 4),
+            risk_tier=tier.value,
+            confidence=round(confidence, 4),
+            reasons=reasons,
+            requires_otp=requires_otp,
+            decided_at=decision.decision_timestamp,
+        )
+
+        return decision
 
 
 # Global singleton
