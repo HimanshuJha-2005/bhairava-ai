@@ -11,8 +11,17 @@ from app.schemas.transaction import (
     FraudPredictionResponse,
     AutoResponseDecision,
 )
+from app.schemas.audit import (
+    FeedbackRequest,
+    FeedbackResponse,
+    TransactionAuditHistory,
+    AuditEntry,
+    AggregateStats,
+    ActionBreakdown,
+)
 from app.services.fraud_detector import detector_service
 from app.services.auto_responder import auto_responder_service
+from app.services.audit_store import audit_store
 
 
 router = APIRouter(prefix="/api/v1", tags=["Fraud Prevention"])
@@ -84,3 +93,82 @@ async def health_check():
         "feature_count": num_features,
         "locked_decision_threshold": locked_threshold,
     }
+
+
+@router.post(
+    "/feedback",
+    response_model=FeedbackResponse,
+    summary="Stage 3: Submit confirmed transaction outcome for a prior decision",
+    status_code=status.HTTP_200_OK,
+)
+async def submit_feedback(payload: FeedbackRequest):
+    """
+    Accepts a merchant-confirmed outcome label for any previously evaluated
+    transaction. Used to close the loop between model decisions and real-world
+    outcomes, enabling future model improvement tracking.
+
+    - **fraud_confirmed**: The transaction was verified as fraudulent after the fact.
+    - **legitimate_confirmed**: The transaction was a genuine purchase by a real cardholder.
+    """
+    success = audit_store.log_feedback(payload.audit_id, payload.outcome.value)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No decision found with audit_id '{payload.audit_id}'. "
+                   "Ensure the transaction was evaluated via /auto-respond first.",
+        )
+    return FeedbackResponse(
+        audit_id=payload.audit_id,
+        outcome=payload.outcome.value,
+        message=f"Outcome '{payload.outcome.value}' recorded for audit_id {payload.audit_id}.",
+    )
+
+
+@router.get(
+    "/audit/{transaction_id}",
+    response_model=TransactionAuditHistory,
+    summary="Stage 3: Retrieve full decision audit trail for a transaction",
+    status_code=status.HTTP_200_OK,
+)
+async def get_audit_history(transaction_id: str):
+    """
+    Returns the complete history of fraud decisions and any associated merchant
+    feedback for a given transaction_id. Useful for dispute resolution and
+    post-incident forensics.
+    """
+    records = audit_store.get_decision_history(transaction_id)
+    if not records:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No audit records found for transaction_id '{transaction_id}'.",
+        )
+    entries = [AuditEntry(**r) for r in records]
+    return TransactionAuditHistory(
+        transaction_id=transaction_id,
+        total_decisions=len(entries),
+        decisions=entries,
+    )
+
+
+@router.get(
+    "/stats",
+    response_model=AggregateStats,
+    summary="Stage 3: Aggregate operational metrics across all evaluated transactions",
+    status_code=status.HTTP_200_OK,
+)
+async def get_stats():
+    """
+    Returns live aggregate statistics across all persisted fraud decisions:
+    - Total transactions evaluated
+    - Action distribution (ALLOW / CHALLENGE_3DS / AUTO_DECLINE)
+    - Average risk score across the population
+    - Merchant-reported fraud confirmation rate
+    """
+    raw = audit_store.get_aggregate_stats()
+    return AggregateStats(
+        total_evaluated=raw["total_evaluated"],
+        action_breakdown=ActionBreakdown(**raw["action_breakdown"]),
+        avg_risk_score=raw["avg_risk_score"],
+        fraud_confirmation_rate=raw["fraud_confirmation_rate"],
+        feedback_submitted=raw["feedback_submitted"],
+    )
