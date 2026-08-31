@@ -180,6 +180,43 @@ class AuditStore:
             result.append(entry)
         return result
 
+    def get_recent_decisions(self, limit: int = 20) -> list:
+        """
+        Return the N most recent decisions across all transactions,
+        joined with any merchant-submitted feedback, ordered latest-first.
+        Used by the monitoring dashboard.
+        """
+        conn = self._conn()
+        rows = conn.execute(
+            """
+            SELECT
+                d.audit_id,
+                d.transaction_id,
+                d.action,
+                d.risk_score,
+                d.risk_tier,
+                d.confidence,
+                d.reasons,
+                d.requires_otp,
+                d.decided_at,
+                f.outcome,
+                f.submitted_at AS feedback_at
+            FROM decisions d
+            LEFT JOIN feedback f ON d.audit_id = f.audit_id
+            ORDER BY d.decided_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+
+        result = []
+        for r in rows:
+            entry = dict(r)
+            entry["reasons"] = json.loads(entry["reasons"])
+            entry["requires_otp"] = bool(entry["requires_otp"])
+            result.append(entry)
+        return result
+
     def get_aggregate_stats(self) -> dict:
         """
         Compute live operational metrics across all persisted decisions.
