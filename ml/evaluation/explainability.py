@@ -89,7 +89,7 @@ def explain_transaction(features: Dict[str, Any], risk_score: float) -> List[str
         reasons.append("HIGH_FREQUENCY_RAPID_CARD_REUSE_DETECTED")
 
     # Email mismatch or rare domain
-    if int(features.get("email_domain_match", 1)) == 0:
+    if int(features.get("email_domain_match", 1)) == 0 and features.get("R_emaildomain"):
         reasons.append("PURCHASER_AND_RECIPIENT_EMAIL_DOMAIN_MISMATCH")
 
     if int(features.get("is_rare_email_domain", 0)) == 1:
