@@ -119,8 +119,15 @@ def risk_distribution_chart(decisions: list) -> go.Figure:
     fig.update_layout(
         margin=dict(t=25, b=20, l=20, r=20),
         height=260,
-        xaxis=dict(range=[0, 1], title="Risk Probability (0.00 - 1.00)", gridcolor="#F1F5F9", titlefont=dict(size=11, color="#475569")),
-        yaxis=dict(title="Transaction Count", gridcolor="#F1F5F9", titlefont=dict(size=11, color="#475569")),
+        xaxis=dict(
+            range=[0, 1],
+            title=dict(text="Risk Probability (0.00 - 1.00)", font=dict(size=11, color="#475569")),
+            gridcolor="#F1F5F9",
+        ),
+        yaxis=dict(
+            title=dict(text="Transaction Count", font=dict(size=11, color="#475569")),
+            gridcolor="#F1F5F9",
+        ),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10, color="#475569")),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
@@ -163,9 +170,8 @@ def shap_attribution_chart(shap_block) -> go.Figure:
         margin=dict(t=10, b=25, l=10, r=10),
         height=220,
         xaxis=dict(
-            title="← Reduces Risk (Legitimate) | Increases Risk (Fraud) →",
+            title=dict(text="← Reduces Risk (Legitimate) | Increases Risk (Fraud) →", font=dict(size=10, color="#64748B")),
             gridcolor="#F1F5F9",
-            titlefont=dict(size=10, color="#64748B"),
         ),
         yaxis=dict(
             tickfont=dict(size=11, color="#1E293B"),
