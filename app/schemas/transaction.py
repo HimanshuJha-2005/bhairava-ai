@@ -3,7 +3,7 @@ Bhairava — Fraud Detection System
 app/schemas/transaction.py
 
 Pydantic schemas for transaction ingestion, risk scoring,
-and automated response decisions.
+SHAP explainability, and automated response decisions.
 """
 
 from typing import List, Optional, Dict, Any
@@ -72,6 +72,24 @@ class FraudPredictionResponse(BaseModel):
     model_version: str = "bhairava-xgboost-v1.0"
 
 
+class ShapFeatureContribution(BaseModel):
+    """
+    Individual feature Shapley contribution.
+    """
+    feature: str
+    friendly_name: str
+    shap_value: float
+    direction: str = Field(..., description="'increases_risk' or 'reduces_risk'")
+
+
+class ShapAttributionBlock(BaseModel):
+    """
+    TreeSHAP explanation payload.
+    """
+    base_score: float
+    top_features: List[ShapFeatureContribution] = Field(default_factory=list)
+
+
 class MerchantNotification(BaseModel):
     """
     Automated notification dispatched to merchant systems.
@@ -94,6 +112,7 @@ class AutoResponseDecision(BaseModel):
     risk_tier: RiskTier
     confidence: float
     reasons: List[str]
+    shap_attribution: Optional[ShapAttributionBlock] = None
     requires_otp_challenge: bool
     merchant_notification: MerchantNotification
     decision_timestamp: datetime = Field(default_factory=get_utc_now)
