@@ -3,8 +3,8 @@ Bhairava — Fraud Detection System
 app/services/auto_responder.py
 
 Stage 2: Policy and automated response decision engine.
-Translates ML risk probabilities and behavioral heuristics into
-cost-optimal business actions.
+Translates ML risk probabilities, behavioral heuristics, and TreeSHAP
+feature attributions into cost-optimal business actions.
 """
 
 import uuid
@@ -16,10 +16,13 @@ from app.schemas.transaction import (
     RiskTier,
     NotificationSeverity,
     MerchantNotification,
+    ShapAttributionBlock,
+    ShapFeatureContribution,
 )
 from app.services.fraud_detector import detector_service
 from app.services.audit_store import audit_store
 from ml.evaluation.explainability import explain_transaction
+from ml.evaluation.shap_explainer import shap_service
 
 
 class AutoResponderService:
@@ -33,12 +36,12 @@ class AutoResponderService:
 
     def evaluate_transaction(self, payload: TransactionPayload) -> AutoResponseDecision:
         """
-        Executes end-to-end evaluation: ML risk scoring -> Policy decisioning -> Explanation.
+        Executes end-to-end evaluation: ML risk scoring -> Policy decisioning -> SHAP Attribution.
         """
         pred_response, feature_map = detector_service.predict_risk(payload)
         base_risk_score = pred_response.risk_score
 
-        # Extract explainability reasons
+        # Extract rule-based explainability reasons
         reasons = explain_transaction(feature_map, base_risk_score)
 
         # Multi-layered risk aggregation (Model + Heuristic circuit breakers)
@@ -94,6 +97,20 @@ class AutoResponderService:
                 action_required="LOG_AND_NOTIFY_MERCHANT_SECURITY",
             )
 
+        # Calculate TreeSHAP feature attributions
+        shap_block = None
+        try:
+            shap_raw = shap_service.explain_transaction(feature_map, top_k=5)
+            shap_block = ShapAttributionBlock(
+                base_score=shap_raw["base_score"],
+                top_features=[
+                    ShapFeatureContribution(**f) for f in shap_raw["top_features"]
+                ],
+            )
+        except Exception:
+            # Non-blocking fallback
+            shap_block = None
+
         audit_id = f"aud_{uuid.uuid4().hex[:12]}"
         confidence = float(abs(effective_risk - 0.5) * 2.0)
 
@@ -104,6 +121,7 @@ class AutoResponderService:
             risk_tier=tier,
             confidence=round(confidence, 4),
             reasons=reasons,
+            shap_attribution=shap_block,
             requires_otp_challenge=requires_otp,
             merchant_notification=notification,
             decision_timestamp=datetime.now(timezone.utc),
