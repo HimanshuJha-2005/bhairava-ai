@@ -96,7 +96,7 @@ class FraudDetectorService:
             "card_reuse_signal": float(np.log1p(extra.get("card1_txn_count", 5))),
             "email_domain_freq": extra.get("email_domain_freq", 500),
             "is_rare_email_domain": 1 if extra.get("email_domain_freq", 500) < 100 else 0,
-            "email_domain_match": 1 if (raw.get("P_emaildomain") and raw.get("P_emaildomain") == raw.get("R_emaildomain")) else 0,
+            "email_domain_match": 0 if (raw.get("R_emaildomain") and raw.get("P_emaildomain") and raw.get("P_emaildomain") != raw.get("R_emaildomain")) else 1,
             "D1_anchor_day": extra.get("D1_anchor_day", 0.0),
             "D2_anchor_day": extra.get("D2_anchor_day", 0.0),
         }
