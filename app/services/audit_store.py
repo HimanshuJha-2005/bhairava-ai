@@ -269,6 +269,76 @@ class AuditStore:
             "feedback_submitted": feedback_total,
         }
 
+    def reset_store(self) -> None:
+        """Clear all decisions and feedback records."""
+        conn = self._conn()
+        conn.execute("DELETE FROM feedback")
+        conn.execute("DELETE FROM decisions")
+        conn.commit()
+
+    def seed_realistic_gateway_traffic(self, total_samples: int = 150) -> None:
+        """
+        Populate the audit store with a realistic payment gateway distribution:
+        - ~92% ALLOW (Low risk legitimate transactions, avg risk ~0.03)
+        - ~5.5% CHALLENGE 3DS (Medium risk transactions, avg risk ~0.45)
+        - ~2.5% AUTO DECLINE (High risk blocked fraud, avg risk ~0.82)
+        """
+        import random
+        from datetime import timedelta
+
+        self.reset_store()
+        conn = self._conn()
+        now = datetime.now(timezone.utc)
+
+        # Generate realistic transactions
+        for i in range(total_samples):
+            audit_id = f"aud_rzp_{i+1000:04d}"
+            txn_id = f"pay_live_{random.randint(100000, 999999)}"
+            offset_seconds = random.randint(10, 86400)
+            decided_at = (now - timedelta(seconds=offset_seconds)).isoformat()
+
+            rand_val = random.random()
+            if rand_val < 0.92:
+                # Legitimate transaction
+                action = "ALLOW"
+                risk_score = round(random.uniform(0.01, 0.18), 4)
+                risk_tier = "LOW"
+                confidence = round((1.0 - risk_score), 4)
+                reasons = json.dumps(["LOW_RISK_NORMAL_BEHAVIOR"])
+                requires_otp = 0
+            elif rand_val < 0.975:
+                # Step-up 3DS challenge
+                action = "CHALLENGE_3DS"
+                risk_score = round(random.uniform(0.36, 0.58), 4)
+                risk_tier = "MEDIUM"
+                confidence = round(abs(risk_score - 0.5) * 2, 4)
+                reasons = json.dumps(["FIRST_OBSERVED_CARD_OR_ADDRESS_COMBINATION", "TRANSACTION_AMOUNT_UNUSUALLY_HIGH_FOR_CARD"])
+                requires_otp = 1
+            else:
+                # High risk decline
+                action = "AUTO_DECLINE"
+                risk_score = round(random.uniform(0.68, 0.94), 4)
+                risk_tier = "HIGH"
+                confidence = round(risk_score, 4)
+                reasons = json.dumps(["HIGH_FREQUENCY_RAPID_CARD_REUSE_DETECTED", "PURCHASER_AND_RECIPIENT_EMAIL_DOMAIN_MISMATCH"])
+                requires_otp = 0
+
+            conn.execute(
+                """
+                INSERT INTO decisions
+                    (audit_id, transaction_id, action, risk_score, risk_tier,
+                     confidence, reasons, requires_otp, decided_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (audit_id, txn_id, action, risk_score, risk_tier, confidence, reasons, requires_otp, decided_at),
+            )
+
+        # Seed sample feedback
+        conn.execute("INSERT INTO feedback (audit_id, outcome, submitted_at) VALUES ('aud_rzp_1001', 'legitimate_confirmed', ?)", (now.isoformat(),))
+        conn.execute("INSERT INTO feedback (audit_id, outcome, submitted_at) VALUES ('aud_rzp_1002', 'legitimate_confirmed', ?)", (now.isoformat(),))
+        conn.execute("INSERT INTO feedback (audit_id, outcome, submitted_at) VALUES ('aud_rzp_1145', 'fraud_confirmed', ?)", (now.isoformat(),))
+        conn.commit()
+
 
 # ---------------------------------------------------------------------------
 # Global singleton — imported by auto_responder and endpoints
