@@ -1,6 +1,6 @@
 """
 Bhairava AI — Live Monitoring Dashboard
-White & Purple Modern Fintech UI for Razorpay AI Buildathon 2026.
+White & Purple Modern Fintech UI 
 """
 
 import sys
@@ -226,7 +226,6 @@ with st.sidebar:
         st.rerun()
 
     st.write("")
-    st.caption("Built for **Razorpay AI Buildathon 2026**")
 
 
 # ---------------------------------------------------------------------------
