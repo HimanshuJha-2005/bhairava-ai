@@ -1,6 +1,6 @@
 """
 Bhairava AI — Dashboard Chart Components
-Clean, modern white & purple fintech visual components for Streamlit.
+Clean, modern white & purple fintech visual components with INR currency formatting.
 """
 
 import plotly.graph_objects as go
@@ -10,7 +10,7 @@ import streamlit as st
 
 
 # ---------------------------------------------------------------------------
-# Modern Fintech Color Palette (White + Violet / Purple accents)
+# Fintech Color Palette
 # ---------------------------------------------------------------------------
 
 ACTION_COLORS = {
@@ -34,10 +34,10 @@ def action_breakdown_chart(action_breakdown: dict) -> go.Figure:
     if not filtered:
         fig = go.Figure()
         fig.update_layout(
-            annotations=[{"text": "No data yet", "showarrow": False, "font": {"size": 14, "color": "#64748B"}}],
+            annotations=[{"text": "No data yet", "showarrow": False, "font": {"size": 13, "color": "#64748B"}}],
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
-            height=260,
+            height=250,
         )
         return fig
 
@@ -48,19 +48,18 @@ def action_breakdown_chart(action_breakdown: dict) -> go.Figure:
     fig = go.Figure(data=[go.Pie(
         labels=labels,
         values=values,
-        hole=0.62,
+        hole=0.64,
         marker=dict(colors=colors, line=dict(color="#FFFFFF", width=3)),
-        textinfo="percent",
+        textinfo="percent+label",
         textposition="inside",
         hoverinfo="label+value+percent",
-        hovertemplate="<b>%{label}</b><br>Count: %{value}<br>Share: %{percent}<extra></extra>",
+        hovertemplate="<b>%{label}</b><br>Count: %{value:,}<br>Share: %{percent}<extra></extra>",
     )])
 
     fig.update_layout(
-        showlegend=True,
-        legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5, font=dict(size=11, color="#475569")),
-        margin=dict(t=10, b=30, l=10, r=10),
-        height=260,
+        showlegend=False,
+        margin=dict(t=10, b=10, l=10, r=10),
+        height=250,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
     )
@@ -74,10 +73,10 @@ def risk_distribution_chart(decisions: list) -> go.Figure:
     if not decisions:
         fig = go.Figure()
         fig.update_layout(
-            annotations=[{"text": "No data yet", "showarrow": False, "font": {"size": 14, "color": "#64748B"}}],
+            annotations=[{"text": "No data yet", "showarrow": False, "font": {"size": 13, "color": "#64748B"}}],
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
-            height=260,
+            height=250,
         )
         return fig
 
@@ -93,7 +92,7 @@ def risk_distribution_chart(decisions: list) -> go.Figure:
         nbins=20,
         barmode="stack",
         color_discrete_map=TIER_COLORS,
-        labels={"risk_score": "Risk Score", "count": "Decisions", "tier": "Risk Tier"},
+        labels={"risk_score": "Risk Score", "count": "Transactions", "tier": "Tier"},
     )
 
     # Threshold Boundary Lines
@@ -101,8 +100,8 @@ def risk_distribution_chart(decisions: list) -> go.Figure:
         x=0.35,
         line_dash="dash",
         line_color="#F59E0B",
-        line_width=2,
-        annotation_text="3DS Boundary (0.35)",
+        line_width=1.5,
+        annotation_text="3DS (0.35)",
         annotation_position="top left",
         annotation_font=dict(size=10, color="#D97706"),
     )
@@ -110,25 +109,33 @@ def risk_distribution_chart(decisions: list) -> go.Figure:
         x=0.65,
         line_dash="dash",
         line_color="#EF4444",
-        line_width=2,
-        annotation_text="Block Boundary (0.65)",
+        line_width=1.5,
+        annotation_text="Block (0.65)",
         annotation_position="top left",
         annotation_font=dict(size=10, color="#DC2626"),
     )
 
     fig.update_layout(
-        margin=dict(t=25, b=20, l=20, r=20),
-        height=260,
+        margin=dict(t=20, b=20, l=10, r=10),
+        height=250,
         xaxis=dict(
             range=[0, 1],
-            title=dict(text="Risk Probability (0.00 - 1.00)", font=dict(size=11, color="#475569")),
+            title=dict(text="Risk Probability (0.00 - 1.00)", font=dict(size=11, color="#64748B")),
             gridcolor="#F1F5F9",
         ),
         yaxis=dict(
-            title=dict(text="Transaction Count", font=dict(size=11, color="#475569")),
+            title=dict(text="Transactions", font=dict(size=11, color="#64748B")),
             gridcolor="#F1F5F9",
         ),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10, color="#475569")),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+            font=dict(size=10, color="#475569"),
+            title=None,
+        ),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
     )
@@ -164,11 +171,11 @@ def shap_attribution_chart(shap_block) -> go.Figure:
         hovertemplate="<b>%{y}</b><br>SHAP Contribution: %{x:+.4f}<extra></extra>",
     ))
 
-    fig.add_vline(x=0, line_width=1.5, line_color="#94A3B8")
+    fig.add_vline(x=0, line_width=1.5, line_color="#CBD5E1")
 
     fig.update_layout(
         margin=dict(t=10, b=25, l=10, r=10),
-        height=220,
+        height=210,
         xaxis=dict(
             title=dict(text="← Reduces Risk (Legitimate) | Increases Risk (Fraud) →", font=dict(size=10, color="#64748B")),
             gridcolor="#F1F5F9",
@@ -199,9 +206,9 @@ def render_recent_decisions(decisions: list) -> None:
             "Risk Score": f"{d['risk_score']:.4f}",
             "Tier": d["risk_tier"],
             "Confidence": f"{d['confidence']:.1%}",
-            "Requires OTP": "3DS Required" if d["requires_otp"] else "None",
-            "Confirmed Outcome": d.get("outcome") or "Pending Feedback",
-            "Timestamp": d["decided_at"][:19].replace("T", " "),
+            "3DS Status": "Step-Up Required" if d["requires_otp"] else "Bypassed",
+            "Confirmed Outcome": d.get("outcome") or "Pending Dispute / Feedback",
+            "Timestamp (UTC)": d["decided_at"][:19].replace("T", " "),
         })
 
     df = pd.DataFrame(rows)
