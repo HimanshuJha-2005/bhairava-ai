@@ -52,11 +52,14 @@ class AutoResponderService:
             "HIGH_FREQUENCY_RAPID_CARD_REUSE_DETECTED",
             "TRANSACTION_AMOUNT_UNUSUALLY_HIGH_FOR_CARD",
             "PURCHASER_AND_RECIPIENT_EMAIL_DOMAIN_MISMATCH",
+            "MISSING_DEVICE_OR_IDENTITY_TELEMETRY",
         }
         detected_severe = [r for r in reasons if r in severe_anomalies]
 
-        if len(detected_severe) >= 2:
-            effective_risk = max(effective_risk, 0.70)
+        if "MISSING_DEVICE_OR_IDENTITY_TELEMETRY" in reasons or "PURCHASER_AND_RECIPIENT_EMAIL_DOMAIN_MISMATCH" in reasons:
+            effective_risk = 0.88  # Instantly triggers AUTO_DECLINE (> 0.65)
+        elif len(detected_severe) >= 2:
+            effective_risk = max(effective_risk, 0.85)
         elif len(detected_severe) == 1:
             effective_risk = max(effective_risk, 0.35)
 
