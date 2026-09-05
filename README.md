@@ -1,6 +1,6 @@
 <div align="center">
 
-# Bhairava AI
+# ⚡ Bhairava AI
 ### Real-Time Payment Risk Manager & Policy Auto-Responder Engine
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com)
@@ -14,6 +14,14 @@
 *Pairing imbalance-aware gradient boosting with cost-optimal 3-tier policy automation, TreeSHAP mathematical attribution, and persistent audit ledgers.*
 
 </div>
+
+---
+
+## 🎬 Demo
+
+[![Bhairava AI Demo](https://img.youtube.com/vi/kVo1YVVl3DM/maxresdefault.jpg)](https://youtu.be/kVo1YVVl3DM)
+
+> Click the thumbnail above to watch the full system walkthrough.
 
 ---
 
@@ -88,7 +96,8 @@ Bhairava AI is trained and benchmarked on the **IEEE-CIS Fraud Detection Benchma
 | **Engineered Feature Space** | 457 continuous dimensions |
 
 ### Why Raw Accuracy is a Dangerous Vanity Metric
-In real payment traffic with a 3.5% fraud rate, a naive model that predicts "legitimate" on every transaction achieves **96.50% accuracy** while catching **0% of fraud**. 
+
+In real payment traffic with a 3.5% fraud rate, a naive model that predicts "legitimate" on every transaction achieves **96.50% accuracy** while catching **0% of fraud**.
 
 Bhairava AI is evaluated exclusively on **PR-AUC, ROC-AUC, Precision, Recall, and fraud-class F1-Score**.
 
@@ -97,6 +106,7 @@ Bhairava AI is evaluated exclusively on **PR-AUC, ROC-AUC, Precision, Recall, an
 ## 🔬 ML Methodology & Benchmark Results
 
 ### 1. Strict Chronological Split (Zero Future Leakage)
+
 To simulate real-world production where future transactions are unseen, data was partitioned strictly across the `TransactionDT` timeline:
 - **Train Set (First ~70%):** 413,378 transactions (3.52% fraud rate)
 - **Validation Set (Middle ~10%):** 59,053 transactions (3.49% fraud rate)
@@ -125,19 +135,20 @@ weighted avg       0.97      0.97      0.97    118109
 
 ---
 
-## 🛠️ What Broke & How We Got Out (Failure Recovery)
+## 🛠️ What Broke & How We Got Out
 
-> *"The last one is the one we read first."* — Razorpay Buildathon Evaluation
+### Problem: The Feature Bloat Trap
 
-### Problem: The "Feature Bloat" Trap
-Early in development, we engineered 6 manual composite boolean flags (combining night timestamps, new card BINs, and large transaction amounts into single `is_high_risk_combo` boolean flags).
-- **The Failure:** When evaluated on the test set, our **fraud F1 dropped from 0.5067 to 0.5019**, and precision degraded.
-- **Root Cause:** Gradient boosted decision trees already learn non-linear threshold boundaries on continuous inputs. Forcing rigid boolean splits fragmented tree depth, created collinear noise across 450+ columns, and over-penalized borderline legitimate transactions. Furthermore, training with `scale_pos_weight=10` shifted model probabilities upward, making standard 0.50 thresholds suboptimal.
+Early in development, we engineered 6 manual composite boolean flags combining night timestamps, new card BINs, and large transaction amounts into single `is_high_risk_combo` boolean flags.
 
-### The Engineering Recovery:
+- **The Failure:** Fraud F1 dropped from 0.5067 to 0.5019 and precision degraded.
+- **Root Cause:** Gradient boosted decision trees already learn non-linear threshold boundaries on continuous inputs. Forcing rigid boolean splits fragmented tree depth, created collinear noise across 450+ columns, and over-penalized borderline legitimate transactions.
+
+### The Engineering Recovery
+
 1. **Pruned Boolean Noise:** Removed all rigid boolean flags.
-2. **High-Signal Continuous Features:** Added fractional cents distribution (detecting automated currency conversion bot artifacts), composite identity velocity (`card1_card2_card3_card5_addr1`), and point-in-time inception anchors (`TransactionDT / 86400 - D1`).
-3. **Subsampling Regularization:** Applied tree subsampling (`colsample_bytree=0.70`, `subsample=0.80`, `min_child_weight=5`, `learning_rate=0.03`) to prevent tree over-reliance on high-frequency card IDs.
+2. **High-Signal Continuous Features:** Added fractional cents distribution, composite identity velocity (`card1_card2_card3_card5_addr1`), and point-in-time inception anchors (`TransactionDT / 86400 - D1`).
+3. **Subsampling Regularization:** Applied tree subsampling (`colsample_bytree=0.70`, `subsample=0.80`, `min_child_weight=5`, `learning_rate=0.03`) to prevent over-reliance on high-frequency card IDs.
 4. **Validation-Locked Thresholding:** Decoupled threshold selection from test data, locking the decision boundary at **0.38** on validation set only.
 
 **Result:** Test ROC-AUC broke 0.90 (reaching **0.9056**), PR-AUC jumped to **0.5458**, and test F1 reached **0.5300** on 118,109 untouched test transactions.
@@ -146,12 +157,10 @@ Early in development, we engineered 6 manual composite boolean flags (combining 
 
 ## 🛡️ Stage 2: Policy Auto-Responder Engine
 
-Bhairava translates ML risk probabilities into business-aware defense actions:
-
 | Risk Tier | Probability Range | Action | Business Rationale |
 | :--- | :---: | :---: | :--- |
-| **LOW** | `< 0.35` | `ALLOW` | Zero-friction checkout. 1-click payment for verified customers. |
-| **MEDIUM** | `0.35 – 0.65` | `CHALLENGE_3DS` | Triggers Step-Up OTP verification. Preserves legitimate sales while catching fraudsters who lack OTP access. |
+| **LOW** | `< 0.35` | `ALLOW` | Zero-friction checkout for verified customers. |
+| **MEDIUM** | `0.35 – 0.65` | `CHALLENGE_3DS` | Step-Up OTP verification. Preserves legitimate sales while catching fraudsters who lack OTP access. |
 | **HIGH** | `> 0.65` | `AUTO_DECLINE` | Instant block + critical merchant webhook alert to eliminate chargeback liability. |
 
 ---
@@ -191,44 +200,45 @@ Every transaction evaluation returns exact **TreeSHAP** (Shapley Additive Explan
 ## 🚀 Quickstart & How to Run
 
 ### 1. Installation
+
 ```powershell
-# Clone the repository
 git clone https://github.com/HimanshuJha-2005/bhairava-ai.git
 cd bhairava-ai
-
-# Create and activate virtual environment
 python -m venv .venv
 .\.venv\Scripts\activate
-
-# Install dependencies
 pip install -r requirements.txt
 ```
 
 ### 2. Launch Live Operations Center (Streamlit UI)
+
 ```powershell
 streamlit run dashboard/main.py
 ```
-> Opens at `http://localhost:8501`. Features real-time risk charts, interactive transaction scorer, and live TreeSHAP visual attribution bars.
+
+> Opens at `http://localhost:8501`
 
 ### 3. Launch REST API Server
+
 ```powershell
 uvicorn app.main:app --reload
 ```
-- Interactive Swagger UI: `http://localhost:8000/docs`
+
+- Swagger UI: `http://localhost:8000/docs`
 - Health Check: `http://localhost:8000/api/v1/health`
 
 ### 4. Run Automated Test Suite
+
 ```powershell
-pytest -v
+python -m pytest tests/ -v
 ```
-> **15 / 15 unit and integration tests passing.**
+
+> 15 / 15 tests passing.
 
 ---
 
 ## 🔌 API Reference
 
 ### `POST /api/v1/auto-respond`
-Full pipeline: XGBoost scoring + 3-tier policy decision + TreeSHAP explainability + SQLite persistence.
 
 **Request:**
 ```json
@@ -278,7 +288,7 @@ Full pipeline: XGBoost scoring + 3-tier policy decision + TreeSHAP explainabilit
 ```
 
 ### `POST /api/v1/feedback`
-Submit merchant-confirmed dispute outcome (`fraud_confirmed` or `legitimate_confirmed`) for any `audit_id`.
+Submit merchant-confirmed dispute outcome for any `audit_id`.
 
 ### `GET /api/v1/stats`
 Live aggregate operational metrics across the persistent SQLite audit ledger.
@@ -295,13 +305,13 @@ bhairava-ai/
 │   │   ├── transaction.py         # Pydantic payloads & SHAP schemas
 │   │   └── audit.py               # Feedback & stats schemas
 │   ├── services/
-│   │   ├── fraud_detector.py      # Sub-12ms XGBoost inference engine
+│   │   ├── fraud_detector.py      # XGBoost inference engine
 │   │   ├── auto_responder.py      # 3-tier policy decision engine
 │   │   └── audit_store.py         # Thread-safe SQLite audit ledger
 │   └── main.py                    # FastAPI application entrypoint
 ├── dashboard/
-│   ├── main.py                    # Streamlit Operations Center (White & Purple UI)
-│   └── components.py              # Plotly donut, histogram & SHAP charts
+│   ├── main.py                    # Streamlit Operations Center
+│   └── components.py              # Plotly charts & SHAP visualizations
 ├── data/
 │   ├── audit/                     # SQLite audit database
 │   └── models/                    # XGBoost model & threshold artifacts
@@ -320,12 +330,20 @@ bhairava-ai/
 │   ├── test_audit_store.py        # SQLite audit ledger tests
 │   └── test_shap_explainer.py     # TreeSHAP unit tests
 ├── demo.py                        # Interactive CLI demo simulation
-├── README.md                      # Complete system documentation
-└── requirements.txt               # Dependencies
+├── README.md
+└── requirements.txt
 ```
+
+---
+
+## ⚠️ Limitations
+
+- **Recall is 0.49** — Bhairava misses roughly half of actual fraud cases on the test set. This is an honest number, not a footnote.
+- Trained on IEEE-CIS 2018 benchmark data. Fraud patterns evolve — production deployment requires quarterly retraining with live transaction feedback.
+- The closed-loop audit ledger exists precisely for this: merchants confirm real fraud cases, enabling continuous model improvement over time.
 
 ---
 
 ## 👨‍💻 Author
 
-Built with precision by **Himanshu Jha** for the **Razorpay AI Buildathon 2026** *(Track 2: AI Risk Manager)*.
+Built by **Himanshu Jha** for the **Razorpay AI Buildathon 2026** *(Track 2: AI Risk Manager)*.
