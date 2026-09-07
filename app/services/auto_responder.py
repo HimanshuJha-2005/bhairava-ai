@@ -56,13 +56,15 @@ class AutoResponderService:
         }
         detected_severe = [r for r in reasons if r in severe_anomalies]
 
-        if "MISSING_DEVICE_OR_IDENTITY_TELEMETRY" in reasons or "PURCHASER_AND_RECIPIENT_EMAIL_DOMAIN_MISMATCH" in reasons:
-            effective_risk = 0.88  # Instantly triggers AUTO_DECLINE (> 0.65)
+        # Strict separation: Only decline on missing telemetry if amount > 5000, OR if there are 3+ other severe anomalies
+        if "MISSING_DEVICE_OR_IDENTITY_TELEMETRY" in reasons and payload.amount > 5000:
+            effective_risk = 0.88
         elif len(detected_severe) >= 2:
             effective_risk = max(effective_risk, 0.85)
         elif len(detected_severe) == 1:
             effective_risk = max(effective_risk, 0.35)
-
+            
+            
         # 3-Tier Policy Decisioning
         if effective_risk < self.allow_threshold:
             action = ResponseAction.ALLOW
