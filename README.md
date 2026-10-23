@@ -91,3 +91,7 @@ ml/                  feature engineering, training, evaluation, SHAP
 tests/               API, policy engine, ledger, and SHAP tests
 demo.py              CLI walkthrough
 ```
+
+## License
+
+MIT. See [LICENSE](LICENSE).
